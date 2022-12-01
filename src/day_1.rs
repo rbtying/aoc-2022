@@ -85,9 +85,9 @@ use std::str::FromStr;
 pub fn parse(txt: &str) -> Vec<Vec<u64>> {
     let mut v = vec![];
     let mut vv = vec![];
-    for line in txt.split("\n") {
+    for line in txt.split('\n') {
         if line.is_empty() {
-            let vvv = std::mem::replace(&mut vv, vec![]);
+            let vvv = std::mem::take(&mut vv);
             v.push(vvv);
         } else {
             vv.push(u64::from_str(line).unwrap())
