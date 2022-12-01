@@ -124,9 +124,7 @@ pub fn part_2(inputs: &str) -> u64 {
 pub mod tests {
     use crate::day_1::{part_1, part_2};
 
-    #[test]
-    pub fn test_day_1_example_part1() {
-        let inputs: &str = r#"1000
+    const INPUTS: &str = r#"1000
 2000
 3000
 
@@ -140,7 +138,10 @@ pub mod tests {
 9000
 
 10000"#;
-        assert_eq!(part_1(inputs), 24000);
+
+    #[test]
+    pub fn test_day_1_example_part1() {
+        assert_eq!(part_1(INPUTS), 24000);
     }
 
     #[test]
@@ -150,21 +151,7 @@ pub mod tests {
 
     #[test]
     pub fn test_day_1_example_part2() {
-        let inputs: &str = r#"1000
-2000
-3000
-
-4000
-
-5000
-6000
-
-7000
-8000
-9000
-
-10000"#;
-        assert_eq!(part_2(inputs), 45000);
+        assert_eq!(part_2(INPUTS), 45000);
     }
 
     #[test]
