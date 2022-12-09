@@ -8,3 +8,4 @@ pub mod day_7;
 pub mod day_7_tree;
 pub mod day_7_tree_2;
 pub mod day_8;
+pub mod day_9;
