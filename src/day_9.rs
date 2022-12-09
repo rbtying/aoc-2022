@@ -48,10 +48,10 @@ fn follow(head_pos: (isize, isize), mut tail_pos: (isize, isize)) -> (isize, isi
 
     if delta_x.abs() > 1 || delta_y.abs() > 1 {
         if delta_x != 0 {
-            tail_pos.0 += delta_x / delta_x.abs();
+            tail_pos.0 += delta_x.signum();
         }
         if delta_y != 0 {
-            tail_pos.1 += delta_y / delta_y.abs();
+            tail_pos.1 += delta_y.signum();
         }
     }
 
@@ -83,18 +83,7 @@ pub fn part_1(input: &str) -> usize {
 }
 
 pub fn part_2(input: &str) -> usize {
-    let mut poses = [
-        (0, 0),
-        (0, 0),
-        (0, 0),
-        (0, 0),
-        (0, 0),
-        (0, 0),
-        (0, 0),
-        (0, 0),
-        (0, 0),
-        (0, 0),
-    ];
+    let mut poses = [(0, 0); 10];
 
     let mut tail_poses = HashSet::new();
 
