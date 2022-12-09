@@ -47,19 +47,12 @@ fn follow(head_pos: (isize, isize), mut tail_pos: (isize, isize)) -> (isize, isi
     let delta_y = head_pos.1 - tail_pos.1;
 
     if delta_x.abs() > 1 || delta_y.abs() > 1 {
-        let old_tail = tail_pos;
-
-        match (delta_x, delta_y) {
-            (0, 2) => tail_pos.1 += 1,
-            (0, -2) => tail_pos.1 -= 1,
-            (2, 0) => tail_pos.0 += 1,
-            (-2, 0) => tail_pos.0 -= 1,
-            (_, _) => {
-                tail_pos.0 += delta_x / delta_x.abs();
-                tail_pos.1 += delta_y / delta_y.abs();
-            }
+        if delta_x != 0 {
+            tail_pos.0 += delta_x / delta_x.abs();
         }
-        assert_ne!(old_tail, tail_pos);
+        if delta_y != 0 {
+            tail_pos.1 += delta_y / delta_y.abs();
+        }
     }
 
     tail_pos
