@@ -12,22 +12,22 @@ enum Val {
 // Note: this problem is interesting pretty much only because of the need to
 // implement recursive parsing. Otherwise, it'd be pretty easy; just a
 // comparator.
-fn parse<I: Iterator<Item = char>>(s: &mut Peekable<I>, depth: usize) -> Val {
+fn parse<I: Iterator<Item = char>>(s: &mut Peekable<I>) -> Val {
     match s.peek().unwrap() {
         '[' => {
             s.next().unwrap();
 
             let mut values = vec![];
 
-            'inner: loop {
+            loop {
                 match s.peek() {
                     None => unreachable!("Unexpected EOF"),
                     Some(']') => {
                         s.next().unwrap();
-                        break 'inner;
+                        break;
                     }
                     _ => {
-                        values.push(parse(s, depth + 1));
+                        values.push(parse(s));
                         if let Some(',') = s.peek() {
                             s.next().unwrap();
                         }
@@ -61,30 +61,31 @@ impl PartialOrd for Val {
 
 impl Ord for Val {
     fn cmp(&self, other: &Self) -> Ordering {
-        let a = self;
-        let b = other;
-        match (a, b) {
+        match (self, other) {
             (Val::V(a), Val::V(b)) => a.cmp(b),
-            (Val::L(_), Val::V(b)) => a.cmp(&Val::L(vec![Val::V(*b)])),
-            (Val::V(a), Val::L(_)) => Val::L(vec![Val::V(*a)]).cmp(b),
-            (Val::L(a), Val::L(b)) => {
-                let mut a_iter = a.iter();
-                let mut b_iter = b.iter();
+            (Val::L(a), Val::V(_)) => recursive_cmp(a.iter(), std::iter::once(other)),
+            (Val::V(_), Val::L(b)) => recursive_cmp(std::iter::once(self), b.iter()),
+            (Val::L(a), Val::L(b)) => recursive_cmp(a.iter(), b.iter()),
+        }
+    }
+}
 
-                loop {
-                    let res = match (a_iter.next(), b_iter.next()) {
-                        (Some(a), Some(b)) => a.cmp(b),
-                        (Some(_), None) => Ordering::Greater,
-                        (None, Some(_)) => Ordering::Less,
-                        (None, None) => break Ordering::Equal,
-                    };
-
-                    if res != Ordering::Equal {
-                        break res;
-                    }
-                }
+fn recursive_cmp<'a, 'b>(
+    mut a_iter: impl Iterator<Item = &'a Val>,
+    mut b_iter: impl Iterator<Item = &'b Val>,
+) -> Ordering {
+    match (a_iter.next(), b_iter.next()) {
+        (Some(a), Some(b)) => {
+            let r = a.cmp(b);
+            if r == Ordering::Equal {
+                recursive_cmp(a_iter, b_iter)
+            } else {
+                r
             }
         }
+        (Some(_), None) => Ordering::Greater,
+        (None, Some(_)) => Ordering::Less,
+        (None, None) => Ordering::Equal,
     }
 }
 
@@ -94,8 +95,8 @@ pub fn part_1(input: &str) -> usize {
         let (a, b) = pair.split_once('\n').unwrap();
         let mut a_iter = a.chars().peekable();
         let mut b_iter = b.chars().peekable();
-        let va = parse(&mut a_iter, 0);
-        let vb = parse(&mut b_iter, 0);
+        let va = parse(&mut a_iter);
+        let vb = parse(&mut b_iter);
 
         if va < vb {
             idx_sum += idx + 1;
@@ -109,7 +110,7 @@ pub fn part_2(input: &str) -> usize {
     let mut packets: Vec<Val> = input
         .lines()
         .filter(|l| !l.is_empty())
-        .map(|l| parse(&mut l.chars().peekable(), 0))
+        .map(|l| parse(&mut l.chars().peekable()))
         .collect();
 
     let v2 = Val::L(vec![Val::L(vec![Val::V(2)])]);
@@ -156,8 +157,7 @@ pub mod tests {
     #[test]
     pub fn test_day_13_parse() {
         fn p(s: &str) -> Val {
-            let mut s_iter = s.chars().peekable();
-            parse(&mut s_iter, 0)
+            parse(&mut s.chars().peekable())
         }
         assert_eq!(
             p("[[1],[2,3,4]]"),
