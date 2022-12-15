@@ -190,20 +190,27 @@ fn parse(input: &str) -> (SensorWithDist, HashSet<(i64, i64)>) {
     (sensor_locs, beacon_locs)
 }
 
-pub fn part_1(input: &str, y: i64) -> usize {
+pub fn part_1(input: &str, y: i64) -> i64 {
     let (sensor_locs, beacon_locs) = parse(input);
 
-    let mut cannot_have_beacon = HashSet::new();
+    let mut intervals = vec![];
 
     for ((sensor_x, sensor_y), d) in &sensor_locs {
-        for x in (sensor_x - *d - 1)..=(sensor_x + *d + 1) {
-            if dist((*sensor_x, *sensor_y), (x, y)) <= *d && !beacon_locs.contains(&(x, y)) {
-                cannot_have_beacon.insert((x, y));
-            }
+        let y_offset = (sensor_y - y).abs();
+        if y_offset > *d {
+            continue;
         }
-    }
 
-    cannot_have_beacon.len()
+        let x_offset = d - y_offset;
+
+        intervals.push(((sensor_x - x_offset), (sensor_x + x_offset)));
+    }
+    intervals.sort();
+
+    merge_overlapping_intervals(&mut intervals);
+    let beacon_locs = beacon_locs.iter().filter(|(_, yy)| *yy == y).count() as i64;
+
+    intervals.into_iter().map(|(s, e)| e - s + 1).sum::<i64>() - beacon_locs
 }
 
 fn merge_overlapping_intervals(arr: &mut Vec<(i64, i64)>) {
