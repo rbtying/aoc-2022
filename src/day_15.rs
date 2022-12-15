@@ -229,6 +229,8 @@ fn merge_overlapping_intervals(arr: &mut Vec<(i64, i64)>) {
     *arr = result;
 }
 
+/// Attempt to solve by merging the ranges on each row. The row with a gap in the range (i.e. two
+/// non-overlapping ranges) is the row with the missing beacon.
 pub fn part_2_slow(input: &str, max_range: i64) -> i64 {
     let (sensor_locs, _) = parse(input);
 
@@ -320,6 +322,8 @@ impl Rectangle {
     }
 }
 
+/// Solve using a quad-tree recursive search. A rectangle *may* contain the beacon if it has a
+/// corner which is out of the range of each sensor (not necessarily the same corner).
 pub fn part_2(input: &str, max_range: i64) -> i64 {
     let (sensor_locs, _) = parse(input);
 
@@ -350,9 +354,85 @@ pub fn part_2(input: &str, max_range: i64) -> i64 {
     unreachable!()
 }
 
+fn tf(p: (i64, i64)) -> (i64, i64) {
+    let r = (p.0 + p.1, p.0 - p.1);
+    assert_eq!(itf(r), p);
+    r
+}
+
+fn itf(ip: (i64, i64)) -> (i64, i64) {
+    ((ip.0 + ip.1) / 2, ip.0 - (ip.0 + ip.1) / 2)
+}
+
+fn intersect(
+    sensor_1_pos: (i64, i64),
+    sensor_1_radius: i64,
+    sensor_2_pos: (i64, i64),
+    sensor_2_radius: i64,
+) -> Vec<(i64, i64)> {
+    let mut intersections = vec![];
+    let d = dist(sensor_1_pos, sensor_2_pos);
+    if d < sensor_1_radius + sensor_2_radius {
+        // There's only an overlap if the distance between the sensors is less than their
+        // individual radii
+
+        // Shift the coordinates by 45 degrees
+        let (x1, y1) = tf(sensor_1_pos);
+        let (x2, y2) = tf(sensor_2_pos);
+
+        // Compute the rectangle bounds
+        let r1_c1 = (x1 - sensor_1_radius, y1 - sensor_1_radius);
+        let r1_c2 = (x1 + sensor_1_radius, y1 + sensor_1_radius);
+        let r2_c1 = (x2 - sensor_2_radius, y2 - sensor_2_radius);
+        let r2_c2 = (x2 + sensor_2_radius, y2 + sensor_2_radius);
+
+        // Compute the intersection of the rectangle
+        let min_x = r1_c1.0.max(r2_c1.0);
+        let max_x = r1_c2.0.min(r2_c2.0);
+        let min_y = r1_c1.1.max(r2_c1.1);
+        let max_y = r1_c2.1.min(r2_c2.1);
+
+        let p1 = itf((min_x, min_y));
+        let p2 = itf((max_x, max_y));
+
+        intersections.push(p1);
+        intersections.push(p2);
+    }
+
+    intersections
+}
+
+/// Abuse the fact that the missing beacon must be one outside a known sensor circle (or there
+/// would be more than one). Valid points are intersections of circles at this radius, centered on
+/// each sensor.
+pub fn part_2_sensors_squared(input: &str, max_range: i64) -> i64 {
+    let (sensor_locs, _) = parse(input);
+
+    let mut pts = vec![];
+    for x in &sensor_locs {
+        for y in &sensor_locs {
+            if x != y {
+                pts.extend(intersect(x.0, x.1 + 1, y.0, y.1 + 1));
+            }
+        }
+    }
+
+    for p in pts {
+        if p.0 >= 0
+            && p.0 <= max_range
+            && p.1 >= 0
+            && p.1 <= max_range
+            && sensor_locs.iter().all(|(s, d)| dist(*s, p) > *d)
+        {
+            return tuning_frequency(p);
+        }
+    }
+    unreachable!()
+}
+
 #[cfg(test)]
 pub mod tests {
-    use crate::day_15::{part_1, part_2, part_2_slow};
+    use crate::day_15::{part_1, part_2, part_2_sensors_squared, part_2_slow};
 
     const INPUTS: &str = r#"Sensor at x=2, y=18: closest beacon is at x=-2, y=15
 Sensor at x=9, y=16: closest beacon is at x=10, y=16
@@ -383,12 +463,17 @@ Sensor at x=20, y=1: closest beacon is at x=15, y=3"#;
     pub fn test_day_15_example_part2() {
         assert_eq!(part_2(INPUTS, 20), 56000011);
         assert_eq!(part_2_slow(INPUTS, 20), 56000011);
+        assert_eq!(part_2_sensors_squared(INPUTS, 20), 56000011);
     }
 
     #[test]
     pub fn test_day_15_part2() {
         assert_eq!(
             part_2(include_str!("input/day_15.txt"), 4000000),
+            11914583249288
+        );
+        assert_eq!(
+            part_2_sensors_squared(include_str!("input/day_15.txt"), 4000000),
             11914583249288
         );
     }
