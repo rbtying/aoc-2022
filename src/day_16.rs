@@ -44,8 +44,10 @@ fn max_pressure_bfs(
     get_rate: impl Fn(u8) -> i64,
     paths: impl Fn((u8, u8)) -> usize,
     max_time: usize,
+    value_to_beat: i64,
 ) -> i64 {
     let mut max = 0;
+    let max_rate: i64 = has_flows.iter().map(|n| get_rate(*n)).sum();
 
     struct State {
         minute: usize,
@@ -73,6 +75,11 @@ fn max_pressure_bfs(
         pressure_released,
     }) = q.pop_front()
     {
+        // Give up early if this isn't a good enough run for part 2.
+        if pressure_released + max_rate * ((max_time - minute) as i64) < value_to_beat {
+            continue;
+        }
+
         for (idx, next_node) in has_flows.iter().enumerate() {
             if *next_node == current_node {
                 continue;
@@ -204,6 +211,7 @@ pub fn part_1(input: &str) -> i64 {
         |idx| valves[&valve_list[idx as usize]].flow_rate,
         |p| paths[&p] as usize,
         30,
+        0,
     )
 }
 
@@ -335,6 +343,7 @@ pub fn part_2(input: &str) -> i64 {
                     |idx| valves_[&valve_list_[idx as usize]].flow_rate,
                     |p| paths_[&p] as usize,
                     26,
+                    max / 2,
                 );
 
                 let elephant_nodes = apply_mask(&has_flows_, elephant).collect::<Vec<_>>();
@@ -344,6 +353,7 @@ pub fn part_2(input: &str) -> i64 {
                     |idx| valves_[&valve_list_[idx as usize]].flow_rate,
                     |p| paths_[&p] as usize,
                     26,
+                    max - me_max,
                 );
 
                 max = max.max(me_max + elephant_max);
@@ -353,9 +363,10 @@ pub fn part_2(input: &str) -> i64 {
         }));
     }
 
-    // No point going beyond the 50% mark, since `me` and `elephant` are
-    // symmetric.
-    for i in 0..(1 << (has_flows.len() - 1)) {
+    // We actually process each pair twice, because `me` and `elephant` are
+    // interchangeable. However, we bail early if the `me` value is too low, so
+    // we need to re-process it as `elephant` value after, just in case.
+    for i in 0..(1 << has_flows.len()) {
         producers[i % num_threads].send(Some(i)).unwrap();
     }
     producers.iter_mut().for_each(|tx| tx.send(None).unwrap());
