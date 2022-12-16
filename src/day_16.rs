@@ -71,6 +71,15 @@ fn best_ending_pressures(
         pressure_released,
     }) = q.pop_front()
     {
+        // Assume that we're done -- we're not necessarily terminated,
+        // but there's no point re-exploring going on another path after
+        // waiting a cycle, since if there were another path to go to,
+        // we would want to go earlier.
+        let final_pressure = pressure_released + current_rate * (max_time - minute) as i64;
+
+        let current_max = maxes.get(&opened).copied().unwrap_or(0);
+        maxes.insert(opened, current_max.max(final_pressure));
+
         for (idx, next_node) in has_flows.iter().enumerate() {
             if *next_node == current_node {
                 continue;
@@ -89,14 +98,6 @@ fn best_ending_pressures(
                 });
             }
 
-            // Assume that we're done -- we're not necessarily terminated,
-            // but there's no point re-exploring going on another path after
-            // waiting a cycle, since if there were another path to go to,
-            // we would want to go earlier.
-            let final_pressure = pressure_released + current_rate * (max_time - minute) as i64;
-
-            let current_max = maxes.get(&opened).copied().unwrap_or(0);
-            maxes.insert(opened, current_max.max(final_pressure));
         }
     }
 
