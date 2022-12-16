@@ -1,8 +1,6 @@
 // See day_16_prompt.txt
 
 use std::collections::{HashMap, VecDeque};
-use std::sync::mpsc;
-use std::thread::spawn;
 
 #[derive(Clone, Debug)]
 pub struct Valve {
@@ -38,16 +36,14 @@ fn parse(input: &str) -> HashMap<String, Valve> {
 }
 
 /// Straightforward, not-particularly-memoized BFS approach.
-fn max_pressure_bfs(
+fn best_ending_pressures(
     aa_idx: u8,
     has_flows: &[u8],
     get_rate: impl Fn(u8) -> i64,
     paths: impl Fn((u8, u8)) -> usize,
     max_time: usize,
-    value_to_beat: i64,
-) -> i64 {
-    let mut max = 0;
-    let max_rate: i64 = has_flows.iter().map(|n| get_rate(*n)).sum();
+) -> HashMap<usize, i64> {
+    let mut maxes = HashMap::new();
 
     struct State {
         minute: usize,
@@ -75,11 +71,6 @@ fn max_pressure_bfs(
         pressure_released,
     }) = q.pop_front()
     {
-        // Give up early if this isn't a good enough run for part 2.
-        if pressure_released + max_rate * ((max_time - minute) as i64) < value_to_beat {
-            continue;
-        }
-
         for (idx, next_node) in has_flows.iter().enumerate() {
             if *next_node == current_node {
                 continue;
@@ -96,154 +87,20 @@ fn max_pressure_bfs(
                     current_rate: current_rate + get_rate(*next_node),
                     pressure_released: pressure_released + travel_time as i64 * current_rate,
                 });
-            } else {
-                // Assume that we're done -- we're not necessarily terminated,
-                // but there's no point re-exploring going on another path after
-                // waiting a cycle, since if there were another path to go to,
-                // we would want to go earlier.
-                let final_pressure = pressure_released + current_rate * (max_time - minute) as i64;
-                max = max.max(final_pressure);
             }
+
+            // Assume that we're done -- we're not necessarily terminated,
+            // but there's no point re-exploring going on another path after
+            // waiting a cycle, since if there were another path to go to,
+            // we would want to go earlier.
+            let final_pressure = pressure_released + current_rate * (max_time - minute) as i64;
+
+            let current_max = maxes.get(&opened).copied().unwrap_or(0);
+            maxes.insert(opened, current_max.max(final_pressure));
         }
     }
 
-    max
-}
-
-/// I found it hard to optimize the original BFS solution originally, so I tried
-/// straight dynamic programming. Unfortunately, it doesn't quite run fast
-/// enough for part 2.
-pub fn max_pressure_dp(
-    aa_idx: u8,
-    has_flows: &[u8],
-    get_rate: impl Fn(u8) -> i64,
-    paths: impl Fn((u8, u8)) -> usize,
-    max_time: usize,
-) -> i64 {
-    let mut tbl: Vec<Vec<Vec<i64>>> =
-        vec![vec![vec![i64::MIN; 1 << has_flows.len()]; has_flows.len()]; (max_time + 1) as usize];
-
-    let mut max = 0;
-
-    for (i, v) in has_flows.iter().enumerate() {
-        let dist = paths((aa_idx, *v));
-        tbl[dist + 1][i][1 << i] = 0;
-    }
-
-    // Try for max_time minutes
-    for minute in 1..=max_time as usize {
-        // With the following set of valves opened
-        for opened in 0..(1 << has_flows.len()) {
-            // Try each location that we can go to
-            for current_node in 0..has_flows.len() {
-                // compute the current flow if we don't go anywhere
-                #[allow(clippy::redundant_closure)]
-                let released_pressure: i64 =
-                    apply_mask(has_flows, opened).map(|n| get_rate(n)).sum();
-
-                let do_nothing: i64 = tbl[minute - 1][current_node][opened] + released_pressure;
-
-                if do_nothing > tbl[minute][current_node][opened] {
-                    tbl[minute][current_node][opened] = do_nothing;
-                }
-                max = max.max(tbl[minute][current_node][opened]);
-
-                // If we haven't opened the current node, move on
-                if (1 << current_node) & opened == 0 {
-                    continue;
-                }
-
-                // Otherwise, consider all the possible downstream paths
-                for next_node in 0..has_flows.len() {
-                    // Don't consider already-opened nodes
-                    if ((1 << next_node) & opened) != 0 {
-                        continue;
-                    }
-
-                    // Skip ahead the number of moves necessary to get to the next node
-                    let dist = paths((has_flows[current_node], has_flows[next_node]));
-
-                    // If it takes too long to get there and then open it, ignore it
-                    if minute + dist + 1 > max_time {
-                        continue;
-                    }
-
-                    // Consider the benefit of going there and opening it
-                    let v =
-                        tbl[minute][current_node][opened] + released_pressure * (dist as i64 + 1);
-
-                    if v > tbl[minute + dist + 1][next_node][opened | (1 << next_node)] {
-                        tbl[minute + dist + 1][next_node][opened | (1 << next_node)] = v;
-                    }
-                }
-            }
-        }
-    }
-
-    max
-}
-
-pub fn part_1(input: &str) -> i64 {
-    let valves = parse(input);
-    let mut valve_list = valves.keys().cloned().collect::<Vec<_>>();
-    valve_list.sort();
-
-    let mut name_to_idx = HashMap::new();
-    let mut has_flows = vec![];
-
-    for (idx, name) in valve_list.iter().enumerate() {
-        name_to_idx.insert(name.to_string(), idx as u8);
-        if valves[name].flow_rate > 0 || name == "AA" {
-            has_flows.push(idx as u8);
-        }
-    }
-
-    let paths = floyd_warshall(
-        name_to_idx.values().copied(),
-        name_to_idx
-            .iter()
-            .flat_map(|(n, i)| valves[n].tunnels.iter().map(|jn| (*i, name_to_idx[jn]))),
-    );
-
-    max_pressure_bfs(
-        name_to_idx["AA"],
-        &has_flows,
-        |idx| valves[&valve_list[idx as usize]].flow_rate,
-        |p| paths[&p] as usize,
-        30,
-        0,
-    )
-}
-
-pub fn part_1_dp(input: &str) -> i64 {
-    let valves = parse(input);
-    let mut valve_list = valves.keys().cloned().collect::<Vec<_>>();
-    valve_list.sort();
-
-    let mut name_to_idx = HashMap::new();
-    let mut has_flows = vec![];
-
-    for (idx, name) in valve_list.iter().enumerate() {
-        name_to_idx.insert(name.to_string(), idx as u8);
-        if valves[name].flow_rate > 0 || name == "AA" {
-            has_flows.push(idx as u8);
-        }
-    }
-
-    let paths = floyd_warshall(
-        name_to_idx.values().copied(),
-        name_to_idx
-            .iter()
-            .flat_map(|(n, i)| valves[n].tunnels.iter().map(|jn| (*i, name_to_idx[jn]))),
-    );
-
-    max_pressure_dp(
-        name_to_idx["AA"],
-        &has_flows,
-        |idx| valves[&valve_list[idx as usize]].flow_rate,
-        |p| paths[&p] as usize,
-        30,
-    )
+    maxes
 }
 
 fn floyd_warshall(
@@ -279,14 +136,38 @@ fn floyd_warshall(
     paths
 }
 
-fn apply_mask(has_flows: &[u8], mask: usize) -> impl Iterator<Item = u8> + '_ {
-    assert!(has_flows.len() < usize::BITS as usize);
+pub fn part_1(input: &str) -> i64 {
+    let valves = parse(input);
+    let mut valve_list = valves.keys().cloned().collect::<Vec<_>>();
+    valve_list.sort();
 
-    has_flows
-        .iter()
-        .enumerate()
-        .filter(move |(idx, _)| mask & (1 << idx) != 0)
-        .map(move |(_, v)| *v)
+    let mut name_to_idx = HashMap::new();
+    let mut has_flows = vec![];
+
+    for (idx, name) in valve_list.iter().enumerate() {
+        name_to_idx.insert(name.to_string(), idx as u8);
+        if valves[name].flow_rate > 0 || name == "AA" {
+            has_flows.push(idx as u8);
+        }
+    }
+
+    let paths = floyd_warshall(
+        name_to_idx.values().copied(),
+        name_to_idx
+            .iter()
+            .flat_map(|(n, i)| valves[n].tunnels.iter().map(|jn| (*i, name_to_idx[jn]))),
+    );
+
+    *best_ending_pressures(
+        name_to_idx["AA"],
+        &has_flows,
+        |idx| valves[&valve_list[idx as usize]].flow_rate,
+        |p| paths[&p] as usize,
+        30,
+    )
+    .values()
+    .max()
+    .unwrap()
 }
 
 pub fn part_2(input: &str) -> i64 {
@@ -311,76 +192,30 @@ pub fn part_2(input: &str) -> i64 {
             .flat_map(|(n, i)| valves[n].tunnels.iter().map(|jn| (*i, name_to_idx[jn]))),
     );
 
-    println!("searching for best combo... {:?}", has_flows);
+    let ending_pressures = best_ending_pressures(
+        name_to_idx["AA"],
+        &has_flows,
+        |idx| valves[&valve_list[idx as usize]].flow_rate,
+        |p| paths[&p] as usize,
+        26,
+    );
 
-    // This is trivially parallelizable, so let's spin up a few threads
+    let mut max = 0;
 
-    let num_threads = match std::thread::available_parallelism() {
-        Ok(v) => v.get(),
-        Err(_) => 1,
-    };
-
-    let mut producers: Vec<mpsc::Sender<Option<usize>>> = vec![];
-    let mut handles = vec![];
-    for _ in 0..num_threads {
-        let (tx, rx) = mpsc::channel();
-        producers.push(tx);
-        let paths_ = paths.clone();
-        let valve_list_ = valve_list.clone();
-        let has_flows_ = has_flows.clone();
-        let valves_ = valves.clone();
-        let aa_idx = name_to_idx["AA"];
-        handles.push(spawn(move || {
-            let mut max = 0;
-            while let Some(i) = rx.recv().unwrap() {
-                let me = i;
-                let elephant = !i & ((1 << has_flows_.len()) - 1);
-
-                let me_nodes = apply_mask(&has_flows_, me).collect::<Vec<_>>();
-                let me_max = max_pressure_bfs(
-                    aa_idx,
-                    &me_nodes,
-                    |idx| valves_[&valve_list_[idx as usize]].flow_rate,
-                    |p| paths_[&p] as usize,
-                    26,
-                    max / 2,
-                );
-
-                let elephant_nodes = apply_mask(&has_flows_, elephant).collect::<Vec<_>>();
-                let elephant_max = max_pressure_bfs(
-                    aa_idx,
-                    &elephant_nodes,
-                    |idx| valves_[&valve_list_[idx as usize]].flow_rate,
-                    |p| paths_[&p] as usize,
-                    26,
-                    max - me_max,
-                );
-
-                max = max.max(me_max + elephant_max);
+    for (me, f_me) in &ending_pressures {
+        for (elephant, f_elephant) in &ending_pressures {
+            if me & elephant == 0 {
+                max = max.max(*f_me + *f_elephant);
             }
-
-            max
-        }));
+        }
     }
 
-    // We actually process each pair twice, because `me` and `elephant` are
-    // interchangeable. However, we bail early if the `me` value is too low, so
-    // we need to re-process it as `elephant` value after, just in case.
-    for i in 0..(1 << has_flows.len()) {
-        producers[i % num_threads].send(Some(i)).unwrap();
-    }
-    producers.iter_mut().for_each(|tx| tx.send(None).unwrap());
-
-    handles
-        .into_iter()
-        .map(|h| h.join().unwrap())
-        .max()
-        .unwrap()
+    max
 }
 
 #[cfg(test)]
 pub mod tests {
-    use crate::day_16::{part_1, part_1_dp, part_2};
+    use crate::day_16::{part_1, part_2};
 
     const INPUTS: &str = r#"Valve AA has flow rate=0; tunnels lead to valves DD, II, BB
 Valve BB has flow rate=13; tunnels lead to valves CC, AA
@@ -396,7 +231,6 @@ Valve JJ has flow rate=21; tunnel leads to valve II"#;
     #[test]
     pub fn test_day_16_example_part1() {
         assert_eq!(part_1(INPUTS), 1651);
-        assert_eq!(part_1_dp(INPUTS), 1651);
     }
 
     #[test]
