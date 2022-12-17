@@ -152,23 +152,7 @@ fn place_rock(
     }
 }
 
-pub fn part_1(input: &str) -> usize {
-    let mut room = Room::new();
-    let mut gas_iter = input
-        .chars()
-        .filter(|c| *c == '>' || *c == '<')
-        .map(|c| c == '>')
-        .enumerate()
-        .cycle();
-
-    for i in 0..2022 {
-        let _ = place_rock(&mut room, &mut gas_iter, Rock::nth_rock(i));
-    }
-
-    room.highest_occupied_row()
-}
-
-pub fn part_2(input: &str) -> usize {
+fn solve(input: &str, num_iter: usize) -> usize {
     let mut room = Room::new();
     let mut gas_iter = input
         .chars()
@@ -179,7 +163,7 @@ pub fn part_2(input: &str) -> usize {
 
     let mut cache = HashMap::new();
 
-    for i in 0..1000000000000 {
+    for i in 0..num_iter {
         let rock = Rock::nth_rock(i);
         let d_idx = place_rock(&mut room, &mut gas_iter, rock);
 
@@ -195,10 +179,10 @@ pub fn part_2(input: &str) -> usize {
 
             // Do some modular arithmetic to find the period we are in at the
             // end point.
-            if 1000000000000 % p == i % p {
+            if (num_iter - 1) % p == i % p {
                 let rows_gained_per_cycle = room.highest_occupied_row() - highest_row_when_observed;
-                let remaining_cycles = (1000000000000 - i) / p;
-                return room.highest_occupied_row() + remaining_cycles * rows_gained_per_cycle - 1;
+                let remaining_cycles = (num_iter - i - 1) / p;
+                return room.highest_occupied_row() + remaining_cycles * rows_gained_per_cycle;
             }
         } else {
             // The two cycle indexes are the rock and the gas index. We also
@@ -212,7 +196,15 @@ pub fn part_2(input: &str) -> usize {
         }
     }
 
-    unreachable!()
+    room.highest_occupied_row()
+}
+
+pub fn part_1(input: &str) -> usize {
+    solve(input, 2022)
+}
+
+pub fn part_2(input: &str) -> usize {
+    solve(input, 1000000000000)
 }
 
 #[cfg(test)]

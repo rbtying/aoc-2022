@@ -97,7 +97,6 @@ fn best_ending_pressures(
                     pressure_released: pressure_released + travel_time as i64 * current_rate,
                 });
             }
-
         }
     }
 
