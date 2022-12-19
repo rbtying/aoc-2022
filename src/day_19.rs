@@ -104,7 +104,7 @@
 // of geodes you could open using each of the first three blueprints. What do
 // you get if you multiply these numbers together?
 
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Default)]
 struct Resources {
@@ -264,7 +264,6 @@ fn maximum_geodes(
     resources: Resources,
     time: u8,
 ) -> i32 {
-
     let max_ore_cost = blueprint.all_costs().iter().map(|c| c.ore).max().unwrap();
     let max_clay_cost = blueprint.all_costs().iter().map(|c| c.clay).max().unwrap();
     let max_obsidian_cost = blueprint
@@ -277,11 +276,12 @@ fn maximum_geodes(
     let mut max_geodes = 0;
 
     let mut visited = HashSet::new();
-    let mut stk = vec![State {
+    let mut q = VecDeque::new();
+    q.push_back(State {
         active_bots,
         resources,
         minute: 1,
-    }];
+    });
 
     while let Some(
         state @ State {
@@ -289,12 +289,14 @@ fn maximum_geodes(
             resources,
             minute,
         },
-    ) = stk.pop()
+    ) = q.pop_front()
     {
-        if visited.contains(&state) {
+        // We visit in BFS order, which means we never observe minutes out-of-order. So we don't
+        // need to include it in the visited set.
+        if visited.contains(&(state.active_bots, state.resources)) {
             continue;
         }
-        visited.insert(state);
+        visited.insert((state.active_bots, state.resources));
 
         if minute == time {
             max_geodes = max_geodes.max((resources + active_bots).geodes);
@@ -303,26 +305,26 @@ fn maximum_geodes(
 
         // Always prefer to build geode bots, if possible.
         if resources.can_build(blueprint.geode_bot_cost) {
-            stk.push(state.build_bot(Resources::geodes_unit(), blueprint.geode_bot_cost));
+            q.push_back(state.build_bot(Resources::geodes_unit(), blueprint.geode_bot_cost));
             continue;
         }
         // Or obsidian bots, if we can, and we haven't maxed out the value. Don't bother building a clay bot or an ore bot.
         if active_bots.obsidian < max_obsidian_cost
             && resources.can_build(blueprint.obsidian_bot_cost)
         {
-            stk.push(state.build_bot(Resources::obsidian_unit(), blueprint.obsidian_bot_cost));
+            q.push_back(state.build_bot(Resources::obsidian_unit(), blueprint.obsidian_bot_cost));
             continue;
         }
         // Or clay bots, if we can, and we haven't maxed out the value
         if active_bots.clay < max_clay_cost && resources.can_build(blueprint.clay_bot_cost) {
-            stk.push(state.build_bot(Resources::clay_unit(), blueprint.clay_bot_cost));
+            q.push_back(state.build_bot(Resources::clay_unit(), blueprint.clay_bot_cost));
         }
         // Or ore bots, if we can, and we haven't maxed out the value
         if active_bots.ore < max_ore_cost && resources.can_build(blueprint.ore_bot_cost) {
-            stk.push(state.build_bot(Resources::ore_unit(), blueprint.ore_bot_cost));
+            q.push_back(state.build_bot(Resources::ore_unit(), blueprint.ore_bot_cost));
         }
 
-        stk.push(state.build_bot(Resources::default(), Resources::default()));
+        q.push_back(state.build_bot(Resources::default(), Resources::default()));
     }
 
     max_geodes
