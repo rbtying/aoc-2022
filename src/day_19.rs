@@ -387,7 +387,7 @@ Blueprint 2: Each ore robot costs 2 ore.  Each clay robot costs 3 ore.  Each obs
 
     #[test]
     pub fn test_day_19_example_part2() {
-        assert_eq!(part_2(INPUTS), 58);
+        assert_eq!(part_2(INPUTS), 3348);
     }
 
     #[test]
