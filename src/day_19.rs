@@ -249,10 +249,23 @@ struct State {
 }
 
 impl State {
-    fn build_bot(self, new_bot: Resources, cost: Resources) -> Self {
+    fn build_bot(self, new_bot: Resources, cost: Resources, max_costs: Resources) -> Self {
+        let mut new_rsc = self.resources - cost + self.active_bots;
+        let new_bots = self.active_bots + new_bot;
+
+        if new_bots.ore == max_costs.ore {
+            new_rsc.ore = new_rsc.ore.min(max_costs.ore);
+        }
+        if new_bots.clay == max_costs.clay {
+            new_rsc.clay = new_rsc.clay.min(max_costs.clay);
+        }
+        if new_bots.obsidian == max_costs.obsidian {
+            new_rsc.obsidian = new_rsc.obsidian.min(max_costs.obsidian);
+        }
+
         State {
-            active_bots: self.active_bots + new_bot,
-            resources: self.resources - cost + self.active_bots,
+            active_bots: new_bots,
+            resources: new_rsc,
             minute: self.minute + 1,
         }
     }
@@ -264,14 +277,17 @@ fn maximum_geodes(
     resources: Resources,
     time: u8,
 ) -> i32 {
-    let max_ore_cost = blueprint.all_costs().iter().map(|c| c.ore).max().unwrap();
-    let max_clay_cost = blueprint.all_costs().iter().map(|c| c.clay).max().unwrap();
-    let max_obsidian_cost = blueprint
-        .all_costs()
-        .iter()
-        .map(|c| c.obsidian)
-        .max()
-        .unwrap();
+    let max_costs = Resources {
+        ore: blueprint.all_costs().iter().map(|c| c.ore).max().unwrap(),
+        clay: blueprint.all_costs().iter().map(|c| c.clay).max().unwrap(),
+        obsidian: blueprint
+            .all_costs()
+            .iter()
+            .map(|c| c.obsidian)
+            .max()
+            .unwrap(),
+        geodes: i32::MAX,
+    };
 
     let mut max_geodes = 0;
 
@@ -305,26 +321,38 @@ fn maximum_geodes(
 
         // Always prefer to build geode bots, if possible.
         if resources.can_build(blueprint.geode_bot_cost) {
-            q.push_back(state.build_bot(Resources::geodes_unit(), blueprint.geode_bot_cost));
+            q.push_back(state.build_bot(
+                Resources::geodes_unit(),
+                blueprint.geode_bot_cost,
+                max_costs,
+            ));
             continue;
         }
         // Or obsidian bots, if we can, and we haven't maxed out the value. Don't bother building a clay bot or an ore bot.
-        if active_bots.obsidian < max_obsidian_cost
+        if active_bots.obsidian < max_costs.obsidian
             && resources.can_build(blueprint.obsidian_bot_cost)
         {
-            q.push_back(state.build_bot(Resources::obsidian_unit(), blueprint.obsidian_bot_cost));
+            q.push_back(state.build_bot(
+                Resources::obsidian_unit(),
+                blueprint.obsidian_bot_cost,
+                max_costs,
+            ));
             continue;
         }
         // Or clay bots, if we can, and we haven't maxed out the value
-        if active_bots.clay < max_clay_cost && resources.can_build(blueprint.clay_bot_cost) {
-            q.push_back(state.build_bot(Resources::clay_unit(), blueprint.clay_bot_cost));
+        if active_bots.clay < max_costs.clay && resources.can_build(blueprint.clay_bot_cost) {
+            q.push_back(state.build_bot(
+                Resources::clay_unit(),
+                blueprint.clay_bot_cost,
+                max_costs,
+            ));
         }
         // Or ore bots, if we can, and we haven't maxed out the value
-        if active_bots.ore < max_ore_cost && resources.can_build(blueprint.ore_bot_cost) {
-            q.push_back(state.build_bot(Resources::ore_unit(), blueprint.ore_bot_cost));
+        if active_bots.ore < max_costs.ore && resources.can_build(blueprint.ore_bot_cost) {
+            q.push_back(state.build_bot(Resources::ore_unit(), blueprint.ore_bot_cost, max_costs));
         }
 
-        q.push_back(state.build_bot(Resources::default(), Resources::default()));
+        q.push_back(state.build_bot(Resources::default(), Resources::default(), max_costs));
     }
 
     max_geodes
