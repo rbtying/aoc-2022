@@ -245,6 +245,7 @@ fn parse(input: &str) -> Vec<Blueprint> {
 struct State {
     active_bots: Resources,
     resources: Resources,
+    no_build_build_mask: Resources,
     minute: u8,
 }
 
@@ -267,6 +268,28 @@ impl State {
             active_bots: new_bots,
             resources: new_rsc,
             minute: self.minute + 1,
+            no_build_build_mask: Resources::default(),
+        }
+    }
+
+    fn wait(self, max_costs: Resources, build_mask: Resources) -> Self {
+        let mut new_rsc = self.resources + self.active_bots;
+
+        if self.active_bots.ore == max_costs.ore {
+            new_rsc.ore = new_rsc.ore.min(max_costs.ore);
+        }
+        if self.active_bots.clay == max_costs.clay {
+            new_rsc.clay = new_rsc.clay.min(max_costs.clay);
+        }
+        if self.active_bots.obsidian == max_costs.obsidian {
+            new_rsc.obsidian = new_rsc.obsidian.min(max_costs.obsidian);
+        }
+
+        State {
+            active_bots: self.active_bots,
+            resources: new_rsc,
+            minute: self.minute + 1,
+            no_build_build_mask: build_mask,
         }
     }
 }
@@ -297,6 +320,7 @@ fn maximum_geodes(
         active_bots,
         resources,
         minute: 1,
+        no_build_build_mask: Resources::default(),
     });
 
     while let Some(
@@ -304,6 +328,7 @@ fn maximum_geodes(
             active_bots,
             resources,
             minute,
+            no_build_build_mask,
         },
     ) = q.pop_front()
     {
@@ -314,13 +339,37 @@ fn maximum_geodes(
         }
         visited.insert((state.active_bots, state.resources));
 
+        max_geodes = max_geodes.max((resources + active_bots).geodes);
+
         if minute == time {
-            max_geodes = max_geodes.max((resources + active_bots).geodes);
             continue;
         }
 
+        // If we managed to make a geode machine every cycle, this is the maximum number of geodes
+        // that can be produced:
+        // - new geodes machines: (1+2+3+...+(remaining time))
+        // - existing geodes: remaining time * active geode bots
+        let remaining_time = time as i32 - minute as i32;
+        let max_potential_geodes_remaining =
+            (remaining_time - 1) * remaining_time / 2 + active_bots.geodes * remaining_time;
+
+        // If this branch can't produce enough geodes to beat our current max, give up.
+        if max_potential_geodes_remaining + resources.geodes < max_geodes {
+            continue;
+        }
+
+        // If we waited a cycle when we _could_ have built something, don't try to build it this
+        // cycle -- we also explored that branch one minute ago, and that branch is strictly better
+        // in all cases.
+        let build_mask = Resources {
+            geodes: resources.can_build(blueprint.geode_bot_cost).into(),
+            obsidian: resources.can_build(blueprint.obsidian_bot_cost).into(),
+            clay: resources.can_build(blueprint.clay_bot_cost).into(),
+            ore: resources.can_build(blueprint.ore_bot_cost).into(),
+        } - no_build_build_mask;
+
         // Always prefer to build geode bots, if possible.
-        if resources.can_build(blueprint.geode_bot_cost) {
+        if build_mask.geodes > 0 {
             q.push_back(state.build_bot(
                 Resources::geodes_unit(),
                 blueprint.geode_bot_cost,
@@ -328,19 +377,17 @@ fn maximum_geodes(
             ));
             continue;
         }
-        // Or obsidian bots, if we can, and we haven't maxed out the value. Don't bother building a clay bot or an ore bot.
-        if active_bots.obsidian < max_costs.obsidian
-            && resources.can_build(blueprint.obsidian_bot_cost)
-        {
+
+        // Or obsidian bots, if we can, and we haven't maxed out the value
+        if active_bots.obsidian < max_costs.obsidian && build_mask.obsidian > 0 {
             q.push_back(state.build_bot(
                 Resources::obsidian_unit(),
                 blueprint.obsidian_bot_cost,
                 max_costs,
             ));
-            continue;
         }
         // Or clay bots, if we can, and we haven't maxed out the value
-        if active_bots.clay < max_costs.clay && resources.can_build(blueprint.clay_bot_cost) {
+        if active_bots.clay < max_costs.clay && build_mask.clay > 0 {
             q.push_back(state.build_bot(
                 Resources::clay_unit(),
                 blueprint.clay_bot_cost,
@@ -348,11 +395,16 @@ fn maximum_geodes(
             ));
         }
         // Or ore bots, if we can, and we haven't maxed out the value
-        if active_bots.ore < max_costs.ore && resources.can_build(blueprint.ore_bot_cost) {
+        if active_bots.ore < max_costs.ore && build_mask.ore > 0 {
             q.push_back(state.build_bot(Resources::ore_unit(), blueprint.ore_bot_cost, max_costs));
         }
 
-        q.push_back(state.build_bot(Resources::default(), Resources::default(), max_costs));
+        // If we can already build every type of bot, no need to wait for resources ever.
+        if build_mask.obsidian > 0 && build_mask.clay > 0 && build_mask.ore > 0 {
+            continue;
+        }
+
+        q.push_back(state.wait(max_costs, build_mask));
     }
 
     max_geodes
@@ -417,7 +469,7 @@ Blueprint 2: Each ore robot costs 2 ore.  Each clay robot costs 3 ore.  Each obs
 
     #[test]
     pub fn test_day_19_example_part2() {
-        assert_eq!(part_2(INPUTS), 3348);
+        assert_eq!(part_2(INPUTS), 62 * 56);
     }
 
     #[test]
