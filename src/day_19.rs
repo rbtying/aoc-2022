@@ -441,10 +441,7 @@ pub fn part_2(input: &str) -> i32 {
             ore: 1,
             ..Default::default()
         };
-        eprintln!("processing {:?}", blueprint);
-
         let max_geodes = maximum_geodes(*blueprint, active_bots, resources, 32);
-        eprintln!("max geodes {}", max_geodes);
         p *= max_geodes;
     }
     p
