@@ -97,12 +97,6 @@ enum Expr {
     Var,
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-struct Monkey {
-    name: [u8; 4],
-    job: Expr,
-}
-
 fn name(s: &str) -> [u8; 4] {
     let mut n = [0; 4];
     assert_eq!(s.len(), 4);
@@ -112,10 +106,10 @@ fn name(s: &str) -> [u8; 4] {
     n
 }
 
-fn compute(monkeys: &HashMap<[u8; 4], Monkey>, name: &[u8; 4]) -> Option<i64> {
+fn compute(monkeys: &HashMap<[u8; 4], Expr>, name: &[u8; 4]) -> Option<i64> {
     let monkey = monkeys[name];
 
-    match monkey.job {
+    match monkey {
         Expr::Immediate(n) => Some(n),
         Expr::Add(a, b) => Some(compute(monkeys, &a)? + compute(monkeys, &b)?),
         Expr::Sub(a, b) => Some(compute(monkeys, &a)? - compute(monkeys, &b)?),
@@ -142,26 +136,26 @@ pub fn part_1(input: &str) -> i64 {
 pub fn part_2(input: &str) -> i64 {
     let mut monkeys = parse(input);
     let root = monkeys.get_mut(b"root").unwrap();
-    root.job = match root.job {
-        Expr::Add(a, b) | Expr::Sub(a, b) | Expr::Mul(a, b) | Expr::Div(a, b) => Expr::Eq(a, b),
+    *root = match root {
+        Expr::Add(a, b) | Expr::Sub(a, b) | Expr::Mul(a, b) | Expr::Div(a, b) => Expr::Eq(*a, *b),
         _ => unreachable!(),
     };
     let humn = monkeys.get_mut(b"humn").unwrap();
-    humn.job = Expr::Var;
+    *humn = Expr::Var;
 
     // Start by simplifying everything which doesn't reference `humn`.
     let names = monkeys.keys().copied().collect::<Vec<_>>();
     for n in &names {
-        if let Expr::Immediate(_) = monkeys[n].job {
+        if let Expr::Immediate(_) = monkeys[n] {
             continue;
         }
         if let Some(v) = compute(&monkeys, n) {
-            monkeys.get_mut(n).unwrap().job = Expr::Immediate(v);
+            *monkeys.get_mut(n).unwrap() = Expr::Immediate(v);
         }
     }
 
     // Now, actually try to solve the root equation
-    let (a, b) = if let Expr::Eq(a, b) = monkeys[b"root"].job {
+    let (a, b) = if let Expr::Eq(a, b) = monkeys[b"root"] {
         (a, b)
     } else {
         unreachable!()
@@ -170,14 +164,14 @@ pub fn part_2(input: &str) -> i64 {
     // In practice, since we only have one monkey which depends on the human, we
     // know that one of the two values is an immediate, and the other is an
     // expression.
-    let (mut expr, mut v, _) = extract(monkeys[&a].job, monkeys[&b].job);
+    let (mut expr, mut v, _) = extract(monkeys[&a], monkeys[&b]);
 
     loop {
         // This is true recursively, so just unroll the expression until we get
         // the answer.
         match expr {
             Expr::Add(a, b) => {
-                let (expr_, v_, _) = extract(monkeys[&a].job, monkeys[&b].job);
+                let (expr_, v_, _) = extract(monkeys[&a], monkeys[&b]);
                 expr = expr_;
 
                 // a + b = v
@@ -185,7 +179,7 @@ pub fn part_2(input: &str) -> i64 {
                 v -= v_;
             }
             Expr::Mul(a, b) => {
-                let (expr_, v_, _) = extract(monkeys[&a].job, monkeys[&b].job);
+                let (expr_, v_, _) = extract(monkeys[&a], monkeys[&b]);
                 expr = expr_;
 
                 // a * b = v
@@ -193,7 +187,7 @@ pub fn part_2(input: &str) -> i64 {
                 v /= v_;
             }
             Expr::Sub(a, b) => {
-                let (expr_, v_, flipped) = extract(monkeys[&a].job, monkeys[&b].job);
+                let (expr_, v_, flipped) = extract(monkeys[&a], monkeys[&b]);
                 expr = expr_;
 
                 if flipped {
@@ -205,7 +199,7 @@ pub fn part_2(input: &str) -> i64 {
                 v += v_;
             }
             Expr::Div(a, b) => {
-                let (expr_, v_, flipped) = extract(monkeys[&a].job, monkeys[&b].job);
+                let (expr_, v_, flipped) = extract(monkeys[&a], monkeys[&b]);
                 expr = expr_;
 
                 if flipped {
@@ -225,7 +219,7 @@ pub fn part_2(input: &str) -> i64 {
     }
 }
 
-fn parse(input: &str) -> HashMap<[u8; 4], Monkey> {
+fn parse(input: &str) -> HashMap<[u8; 4], Expr> {
     let mut monkeys = HashMap::new();
 
     for line in input.lines() {
@@ -252,9 +246,7 @@ fn parse(input: &str) -> HashMap<[u8; 4], Monkey> {
             }
         };
 
-        let n = name(monkey_name);
-
-        monkeys.insert(n, Monkey { name: n, job });
+        monkeys.insert(name(monkey_name), job);
     }
 
     monkeys
