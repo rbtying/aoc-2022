@@ -344,7 +344,7 @@ fn solve(
             unreachable!("'{:?}'", c);
         };
 
-        part_2_move(&mut state, &traverse, d);
+        mv(&mut state, &traverse, d);
 
         if c == 'L' {
             state.dir = state.dir.turn_left();
@@ -352,7 +352,7 @@ fn solve(
             state.dir = state.dir.turn_right();
         }
     }
-    part_2_move(&mut state, &traverse, dist);
+    mv(&mut state, &traverse, dist);
 
     println!();
     for l in state.history.iter() {
@@ -482,15 +482,8 @@ fn compute_traversals(face_lookup: &[Vec<usize>]) -> [[(FaceId, Dir); 4]; 6] {
     use Dir::*;
     use FaceId::*;
 
-    eprintln!();
-
     for (r, row) in face_lookup.iter().enumerate().skip(1) {
         for (c, f) in row.iter().copied().enumerate().skip(1) {
-            if f != 9 {
-                eprint!("{:?}", FaceId::from(f));
-            } else {
-                eprint!(" ");
-            }
             let p_c = face_lookup[r][c - 1];
             let p_r = face_lookup[r - 1][c];
             if p_c != f && p_c != 9 && f != 9 {
@@ -501,12 +494,6 @@ fn compute_traversals(face_lookup: &[Vec<usize>]) -> [[(FaceId, Dir); 4]; 6] {
                 tab[p_r][D as usize] = Some((FaceId::from(f), D));
                 tab[f][U as usize] = Some((FaceId::from(p_r), U));
             }
-        }
-        eprintln!();
-    }
-    for a in [A, B, C, X, Y, Z] {
-        for dir in [R, D, L, U] {
-            eprintln!("{:?} {:?} {:?}", a, dir, tab[a as usize][dir as usize]);
         }
     }
 
@@ -524,43 +511,6 @@ fn compute_traversals(face_lookup: &[Vec<usize>]) -> [[(FaceId, Dir); 4]; 6] {
                 }
             }
         }
-    }
-
-    for a in [A, B, C, X, Y, Z] {
-        if let Some((face, new_dir)) = tab[a as usize][U as usize] {
-            eprintln!("    {}", new_dir.sym());
-            eprintln!();
-            eprintln!("    {:?}", face);
-            eprintln!("    {}", U.sym());
-        } else {
-            eprintln!();
-            eprintln!();
-            eprintln!();
-            eprintln!();
-        }
-
-        if let Some((face, new_dir)) = tab[a as usize][L as usize] {
-            eprint!("{} {:?}{}", new_dir.sym(), face, L.sym());
-        } else {
-            eprint!("    ");
-        }
-        eprint!("{:?}", a);
-        if let Some((face, new_dir)) = tab[a as usize][R as usize] {
-            eprint!("{}{:?} {}", R.sym(), face, new_dir.sym());
-        }
-        eprintln!();
-        if let Some((face, new_dir)) = tab[a as usize][D as usize] {
-            eprintln!("    {}", D.sym());
-            eprintln!("    {:?}", face);
-            eprintln!();
-            eprintln!("    {}", new_dir.sym());
-        } else {
-            eprintln!();
-            eprintln!();
-            eprintln!();
-            eprintln!();
-        }
-        eprintln!("---------");
     }
 
     let mut tab2 = [[(A, D); 4]; 6];
@@ -584,11 +534,7 @@ pub fn part_2(input: &str, cube_len: usize) -> usize {
     solve(i2, &faces, &mut map, &face_lookup, cube_len, t2)
 }
 
-fn part_2_move<'a, 'b>(
-    state: &mut State<'a, 'b>,
-    traverse: &impl Fn(FaceId, Dir) -> (FaceId, Dir),
-    d: u32,
-) {
+fn mv<'a, 'b>(state: &mut State<'a, 'b>, traverse: &impl Fn(FaceId, Dir) -> (FaceId, Dir), d: u32) {
     for _ in 0..d {
         let next_pos = state.dir.apply(state.pos);
         let (next_face, next_dir, next_pos) = if next_pos.0 < 0
