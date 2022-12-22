@@ -76,14 +76,14 @@
 // By drawing the last facing you had with an arrow on each tile you visit, the full path taken by
 // the above example looks like this:
 
-//         >>v#    
-//         .#v.    
-//         #.v.    
-//         ..v.    
-// ...#...v..v#    
-// >>>v...>#.>>    
-// ..#v...#....    
-// ...>>>>v..#.    
+//         >>v#
+//         .#v.
+//         #.v.
+//         ..v.
+// ...#...v..v#
+// >>>v...>#.>>
+// ..#v...#....
+// ...>>>>v..#.
 //         ...#....
 //         .....#..
 //         .#......
@@ -166,14 +166,14 @@
 // Using the same method of drawing the last facing you had with an arrow on each tile you visit,
 // the full path taken by the above example now looks like this:
 
-//         >>v#    
-//         .#v.    
-//         #.v.    
-//         ..v.    
-// ...#..^...v#    
-// .>>>>>^.#.>>    
-// .^#....#....    
-// .^........#.    
+//         >>v#
+//         .#v.
+//         #.v.
+//         ..v.
+// ...#..^...v#
+// .>>>>>^.#.>>
+// .^#....#....
+// .^........#.
 //         ...#..v.
 //         .....#v.
 //         .#v<<<<.
@@ -185,7 +185,6 @@
 
 // Fold the map into a cube, then follow the path given in the monkeys' notes. What is the final
 // password?
-
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Ord, PartialOrd)]
 #[repr(usize)]
@@ -206,16 +205,31 @@ impl Dir {
 
     fn sym(self) -> char {
         match self {
-            Dir::R => '>',
-            Dir::D => 'V',
-            Dir::L => '<',
-            Dir::U => '^',
+            Dir::R => '→',
+            Dir::D => '↓',
+            Dir::L => '←',
+            Dir::U => '↑',
         }
+    }
+
+    /// Rotate self and begin until begin == end
+    fn match_rot(self, mut begin: Dir, end: Dir) -> Dir {
+        let mut res = self;
+        while begin != end {
+            res = res.turn_left();
+            begin = begin.turn_left();
+        }
+        res
+    }
+
+    fn reverse(self) -> Dir {
+        (self as usize + 2).rem_euclid(4).into()
     }
 
     fn turn_right(self) -> Dir {
         (self as usize + 1).rem_euclid(4).into()
     }
+
     fn turn_left(self) -> Dir {
         (((self as usize) as isize - 1).rem_euclid(4) as usize).into()
     }
@@ -260,21 +274,22 @@ impl From<usize> for FaceId {
     }
 }
 
+#[derive(Clone)]
 struct Face {
     top_left: (usize, usize),
     grid: Vec<Vec<bool>>,
 }
 
-struct State {
+struct State<'a, 'b> {
     face: FaceId,
-    faces: Vec<Face>,
+    faces: &'a [Face],
     cube_len: isize,
     pos: (usize, usize),
     dir: Dir,
-    history: Vec<Vec<char>>,
+    history: &'b mut Vec<Vec<char>>,
 }
 
-impl State {
+impl<'a, 'b> State<'a, 'b> {
     fn orig_pos(&self) -> (usize, usize) {
         let d = self.faces[self.face as usize].top_left;
         (self.pos.0 + d.0, self.pos.1 + d.1)
@@ -299,96 +314,14 @@ impl State {
     }
 }
 
-pub fn part_1(input: &str, cube_len: usize) -> usize {
-    let (i1, _) = input.split_once("\n\n").unwrap();
-    let (faces, _, face_lookup) = extract_faces(i1, cube_len);
-
-    part_2(input, cube_len, |face_id, dir| {
-        let c = faces[face_id as usize].top_left;
-        let p = |v, x, l| (v as isize + x as isize).rem_euclid(l as isize) as usize;
-        let m = |v, x, l| (v as isize - x as isize).rem_euclid(l as isize) as usize;
-
-        let next_face_id = match dir {
-            Dir::R => (1..=6)
-                .map(|x| face_lookup[c.0][p(c.1, x * cube_len, face_lookup[c.0].len())]).find(|v| *v != 9)
-                .unwrap(),
-            Dir::L => (1..=6)
-                .map(|x| face_lookup[c.0][m(c.1, x * cube_len, face_lookup[c.0].len())]).find(|v| *v != 9)
-                .unwrap(),
-            Dir::U => (1..=6)
-                .map(|x| face_lookup[m(c.0, x * cube_len, face_lookup.len())][c.1]).find(|v| *v != 9)
-                .unwrap(),
-            Dir::D => (1..=6)
-                .map(|x| face_lookup[p(c.0, x * cube_len, face_lookup.len())][c.1]).find(|v| *v != 9)
-                .unwrap(),
-        };
-
-        (next_face_id.into(), dir)
-    })
-}
-
-fn extract_faces(i1: &str, cube_len: usize) -> (Vec<Face>, Vec<Vec<char>>, Vec<Vec<usize>>) {
-    let max_cols = i1.lines().map(|l| l.len()).max().unwrap();
-    let max_rows = i1.lines().count();
-
-    let mut map = vec![vec![' '; max_cols]; max_rows];
-    for (r, l) in i1.lines().enumerate() {
-        for (c, x) in l.chars().enumerate() {
-            map[r][c] = x;
-        }
-    }
-
-    // Find all six faces of the cube
-    let mut face_lookup = vec![vec![9usize; max_cols]; max_rows];
-    let mut face_id = 0;
-
-    let mut faces = vec![];
-    let mut stk = vec![(0, map[0].iter().position(|c| *c == '.').unwrap())];
-
-    while let Some(top_left) = stk.pop() {
-        if map[top_left.0][top_left.1] != ' ' {
-            let mut grid = vec![vec![false; cube_len]; cube_len];
-
-            for r in top_left.0..top_left.0 + cube_len {
-                for c in top_left.1..top_left.1 + cube_len {
-                    face_lookup[r][c] = face_id;
-                    grid[r - top_left.0][c - top_left.1] = map[r][c] == '#';
-                }
-            }
-            faces.push(Face { top_left, grid });
-            face_id += 1;
-            if top_left.0 >= cube_len && face_lookup[top_left.0 - cube_len][top_left.1] == 9 {
-                stk.push((top_left.0 - cube_len, top_left.1));
-            }
-            if top_left.0 + cube_len < map.len()
-                && face_lookup[top_left.0 + cube_len][top_left.1] == 9
-            {
-                stk.push((top_left.0 + cube_len, top_left.1));
-            }
-            if top_left.1 >= cube_len && face_lookup[top_left.0][top_left.1 - cube_len] == 9 {
-                stk.push((top_left.0, top_left.1 - cube_len));
-            }
-            if top_left.1 + cube_len < map[top_left.0].len()
-                && face_lookup[top_left.0][top_left.1 + cube_len] == 9
-            {
-                stk.push((top_left.0, top_left.1 + cube_len));
-            }
-        }
-    }
-
-    assert_eq!(faces.len(), 6);
-
-    (faces, map, face_lookup)
-}
-
-pub fn part_2(
-    input: &str,
+fn solve(
+    i2: &str,
+    faces: &[Face],
+    map: &mut Vec<Vec<char>>,
+    face_lookup: &[Vec<usize>],
     cube_len: usize,
     traverse: impl Fn(FaceId, Dir) -> (FaceId, Dir),
 ) -> usize {
-    let (i1, i2) = input.split_once("\n\n").unwrap();
-    let (faces, map, face_lookup) = extract_faces(i1, cube_len);
-
     let mut state = State {
         faces,
         face: FaceId::A,
@@ -456,7 +389,206 @@ pub fn part_2(
     state.answer()
 }
 
-fn part_2_move(state: &mut State, traverse: &impl Fn(FaceId, Dir) -> (FaceId, Dir), d: u32) {
+pub fn part_1(input: &str, cube_len: usize) -> usize {
+    let (i1, i2) = input.split_once("\n\n").unwrap();
+    let (faces, mut map, face_lookup) = extract_faces(i1, cube_len);
+    let t = |face_id, dir| {
+        let c = faces[face_id as usize].top_left;
+        let p = |v, x, l| (v as isize + x as isize).rem_euclid(l as isize) as usize;
+        let m = |v, x, l| (v as isize - x as isize).rem_euclid(l as isize) as usize;
+
+        let next_face_id = match dir {
+            Dir::R => (1..=6)
+                .map(|x| face_lookup[c.0][p(c.1, x * cube_len, face_lookup[c.0].len())])
+                .find(|v| *v != 9)
+                .unwrap(),
+            Dir::L => (1..=6)
+                .map(|x| face_lookup[c.0][m(c.1, x * cube_len, face_lookup[c.0].len())])
+                .find(|v| *v != 9)
+                .unwrap(),
+            Dir::U => (1..=6)
+                .map(|x| face_lookup[m(c.0, x * cube_len, face_lookup.len())][c.1])
+                .find(|v| *v != 9)
+                .unwrap(),
+            Dir::D => (1..=6)
+                .map(|x| face_lookup[p(c.0, x * cube_len, face_lookup.len())][c.1])
+                .find(|v| *v != 9)
+                .unwrap(),
+        };
+
+        (next_face_id.into(), dir)
+    };
+
+    solve(i2, &faces, &mut map, &face_lookup, cube_len, t)
+}
+
+fn extract_faces(i1: &str, cube_len: usize) -> (Vec<Face>, Vec<Vec<char>>, Vec<Vec<usize>>) {
+    let max_cols = i1.lines().map(|l| l.len()).max().unwrap();
+    let max_rows = i1.lines().count();
+
+    let mut map = vec![vec![' '; max_cols]; max_rows];
+    for (r, l) in i1.lines().enumerate() {
+        for (c, x) in l.chars().enumerate() {
+            map[r][c] = x;
+        }
+    }
+
+    // Find all six faces of the cube
+    let mut face_lookup = vec![vec![9usize; max_cols]; max_rows];
+    let mut face_id = 0;
+
+    let mut faces = vec![];
+    let mut stk = vec![(0, map[0].iter().position(|c| *c == '.').unwrap())];
+
+    while let Some(top_left) = stk.pop() {
+        if map[top_left.0][top_left.1] != ' ' {
+            let mut grid = vec![vec![false; cube_len]; cube_len];
+
+            for r in top_left.0..top_left.0 + cube_len {
+                for c in top_left.1..top_left.1 + cube_len {
+                    face_lookup[r][c] = face_id;
+                    grid[r - top_left.0][c - top_left.1] = map[r][c] == '#';
+                }
+            }
+            faces.push(Face { top_left, grid });
+            face_id += 1;
+            if top_left.0 >= cube_len && face_lookup[top_left.0 - cube_len][top_left.1] == 9 {
+                stk.push((top_left.0 - cube_len, top_left.1));
+            }
+            if top_left.0 + cube_len < map.len()
+                && face_lookup[top_left.0 + cube_len][top_left.1] == 9
+            {
+                stk.push((top_left.0 + cube_len, top_left.1));
+            }
+            if top_left.1 >= cube_len && face_lookup[top_left.0][top_left.1 - cube_len] == 9 {
+                stk.push((top_left.0, top_left.1 - cube_len));
+            }
+            if top_left.1 + cube_len < map[top_left.0].len()
+                && face_lookup[top_left.0][top_left.1 + cube_len] == 9
+            {
+                stk.push((top_left.0, top_left.1 + cube_len));
+            }
+        }
+    }
+
+    assert_eq!(faces.len(), 6);
+
+    (faces, map, face_lookup)
+}
+
+fn compute_traversals(face_lookup: &[Vec<usize>]) -> [[(FaceId, Dir); 4]; 6] {
+    // Simplify face_lookup into an adjacency table
+    let mut tab = [[None; 4]; 6];
+    use Dir::*;
+    use FaceId::*;
+
+    eprintln!();
+
+    for (r, row) in face_lookup.iter().enumerate().skip(1) {
+        for (c, f) in row.iter().copied().enumerate().skip(1) {
+            if f != 9 {
+                eprint!("{:?}", FaceId::from(f));
+            } else {
+                eprint!(" ");
+            }
+            let p_c = face_lookup[r][c - 1];
+            let p_r = face_lookup[r - 1][c];
+            if p_c != f && p_c != 9 && f != 9 {
+                tab[p_c][R as usize] = Some((FaceId::from(f), R));
+                tab[f][L as usize] = Some((FaceId::from(p_c), L));
+            }
+            if p_r != f && p_r != 9 && f != 9 {
+                tab[p_r][D as usize] = Some((FaceId::from(f), D));
+                tab[f][U as usize] = Some((FaceId::from(p_r), U));
+            }
+        }
+        eprintln!();
+    }
+    for a in [A, B, C, X, Y, Z] {
+        for dir in [R, D, L, U] {
+            eprintln!("{:?} {:?} {:?}", a, dir, tab[a as usize][dir as usize]);
+        }
+    }
+
+    while tab.iter().any(|l| l.iter().any(|v| v.is_none())) {
+        for a in [A, B, C, X, Y, Z] {
+            for dir in [R, D, L, U] {
+                if let Some((b, bd)) = tab[a as usize][dir as usize] {
+                    let dir2 = dir.turn_right();
+                    if let Some((c, cd)) = tab[a as usize][dir2 as usize] {
+                        let b_out = dir2.match_rot(dir, bd);
+                        let c_out = dir.match_rot(dir2, cd);
+                        tab[b as usize][b_out as usize] = Some((c, c_out.reverse()));
+                        tab[c as usize][c_out as usize] = Some((b, b_out.reverse()));
+                    }
+                }
+            }
+        }
+    }
+
+    for a in [A, B, C, X, Y, Z] {
+        if let Some((face, new_dir)) = tab[a as usize][U as usize] {
+            eprintln!("    {}", new_dir.sym());
+            eprintln!();
+            eprintln!("    {:?}", face);
+            eprintln!("    {}", U.sym());
+        } else {
+            eprintln!();
+            eprintln!();
+            eprintln!();
+            eprintln!();
+        }
+
+        if let Some((face, new_dir)) = tab[a as usize][L as usize] {
+            eprint!("{} {:?}{}", new_dir.sym(), face, L.sym());
+        } else {
+            eprint!("    ");
+        }
+        eprint!("{:?}", a);
+        if let Some((face, new_dir)) = tab[a as usize][R as usize] {
+            eprint!("{}{:?} {}", R.sym(), face, new_dir.sym());
+        }
+        eprintln!();
+        if let Some((face, new_dir)) = tab[a as usize][D as usize] {
+            eprintln!("    {}", D.sym());
+            eprintln!("    {:?}", face);
+            eprintln!();
+            eprintln!("    {}", new_dir.sym());
+        } else {
+            eprintln!();
+            eprintln!();
+            eprintln!();
+            eprintln!();
+        }
+        eprintln!("---------");
+    }
+
+    let mut tab2 = [[(A, D); 4]; 6];
+
+    for (idx, l) in tab.into_iter().enumerate() {
+        for (idx2, d) in l.into_iter().enumerate() {
+            tab2[idx][idx2] = d.unwrap();
+        }
+    }
+
+    tab2
+}
+
+pub fn part_2(input: &str, cube_len: usize) -> usize {
+    let (i1, i2) = input.split_once("\n\n").unwrap();
+    let (faces, mut map, face_lookup) = extract_faces(i1, cube_len);
+
+    let t = compute_traversals(&face_lookup);
+    let t2 = |face_id, dir| t[face_id as usize][dir as usize];
+
+    solve(i2, &faces, &mut map, &face_lookup, cube_len, t2)
+}
+
+fn part_2_move<'a, 'b>(
+    state: &mut State<'a, 'b>,
+    traverse: &impl Fn(FaceId, Dir) -> (FaceId, Dir),
+    d: u32,
+) {
     for _ in 0..d {
         let next_pos = state.dir.apply(state.pos);
         let (next_face, next_dir, next_pos) = if next_pos.0 < 0
@@ -534,40 +666,11 @@ pub mod tests {
 
     #[test]
     pub fn test_day_22_example_part2() {
-        use super::Dir::*;
-        use super::FaceId::*;
-
-        let t = [
-            [(Z, L), (B, D), (C, D), (X, D)],
-            [(Z, D), (Y, D), (C, L), (A, U)],
-            [(B, R), (Y, R), (X, L), (A, R)],
-            [(C, R), (Y, U), (Z, U), (A, D)],
-            [(Z, R), (X, U), (C, U), (B, U)],
-            [(A, L), (X, R), (Y, L), (B, L)],
-        ];
-
-        assert_eq!(
-            part_2(INPUTS, 4, |face_id, dir| t[face_id as usize][dir as usize]),
-            5031
-        );
+        assert_eq!(part_2(INPUTS, 4), 5031);
     }
 
     #[test]
     pub fn test_day_22_part2() {
-        use super::Dir::*;
-        use super::FaceId::*;
-        let t = [
-            [(B, R), (C, D), (Y, R), (Z, R)],
-            [(X, L), (C, L), (A, L), (Z, U)],
-            [(B, U), (X, D), (Y, D), (A, U)],
-            [(B, L), (Z, L), (Y, L), (C, U)],
-            [(X, R), (Z, D), (A, R), (C, R)],
-            [(X, U), (B, D), (A, D), (Y, U)],
-        ];
-        assert_eq!(
-            part_2(include_str!("input/day_22.txt"), 50, |face_id, dir| t
-                [face_id as usize][dir as usize]),
-            143208
-        );
+        assert_eq!(part_2(include_str!("input/day_22.txt"), 50), 143208);
     }
 }
