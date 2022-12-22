@@ -477,7 +477,6 @@ fn extract_faces(i1: &str, cube_len: usize) -> (Vec<Face>, Vec<Vec<char>>, Vec<V
 }
 
 fn compute_traversals(face_lookup: &[Vec<usize>]) -> [[(FaceId, Dir); 4]; 6] {
-    // Simplify face_lookup into an adjacency table
     let mut tab = [[None; 4]; 6];
     use Dir::*;
     use FaceId::*;
