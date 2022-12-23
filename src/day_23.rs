@@ -89,7 +89,7 @@ fn run_to_completion(
             return r;
         }
     }
-    max_steps.unwrap();
+    max_steps.unwrap()
 }
 
 pub fn part_1(input: &str) -> usize {
