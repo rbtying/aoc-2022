@@ -420,10 +420,7 @@ pub fn part_1(input: &str) -> i32 {
             ore: 1,
             ..Default::default()
         };
-        println!("processing {:?}", blueprint);
-
         let max_geodes = maximum_geodes(blueprint, active_bots, resources, 24);
-        println!("max geodes {}", max_geodes);
 
         quality_sum += blueprint.id * max_geodes;
     }
