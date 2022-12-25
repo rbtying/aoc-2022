@@ -19,7 +19,7 @@ use Dir::*;
 const ALL_DIRS: [Dir; 8] = [N, NE, E, SE, S, SW, W, NW];
 
 fn next_pos(pos: (isize, isize), dir: Dir) -> (isize, isize) {
-    let pos = (pos.0 as isize, pos.1 as isize);
+    let pos = (pos.0, pos.1);
 
     let n_pos = match dir {
         N => (pos.0 - 1, pos.1),
@@ -32,7 +32,7 @@ fn next_pos(pos: (isize, isize), dir: Dir) -> (isize, isize) {
         NW => (pos.0 - 1, pos.1 - 1),
     };
 
-    (n_pos.0 as isize, n_pos.1 as isize)
+    (n_pos.0, n_pos.1)
 }
 
 fn run_to_completion(
